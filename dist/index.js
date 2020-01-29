@@ -105,6 +105,173 @@ var MerkleTree = /** @class */ (function () {
         }
     };
     /**
+     * verifyPartialTree
+     * @desc Constructs Partial Merkle Tree
+     * @param {Buffer[]} targetNodes - leaves that are to be provided to the partial merkle tree
+     * @return {Buffer[][]}
+     * @example
+     *```js
+     *const partialTree = tree.createPartialTree(leaves)
+     *```
+     */
+    MerkleTree.prototype.createPartialTree = function (targetNodes) {
+        // first we make a quick pass to transform our leaves
+        var targetNodeIndex = 0;
+        var partialTree = [];
+        partialTree.push([]);
+        for (var i_1 = 0; i_1 < this.leaves.length; i_1 += 2) {
+            if (i_1 + 1 === this.leaves.length) {
+                partialTree[0].push({ type: "CHILD", data: null });
+            }
+            else {
+                var left_1 = this.leaves[i_1];
+                var right_1 = i_1 + 1 == this.leaves.length ? left_1 : this.leaves[i_1 + 1];
+                var leftTargetNodeFound = false;
+                var rightTargetNodeFound = false;
+                for (var k = 0; k < targetNodes.length; k++) {
+                    if (Buffer.compare(targetNodes[k], left_1) == 0) {
+                        partialTree[0].push({ type: "TARGET", data: targetNodeIndex });
+                        targetNodeIndex++;
+                        leftTargetNodeFound = true;
+                    }
+                    if (Buffer.compare(targetNodes[k], right_1) == 0) {
+                        if (!leftTargetNodeFound) {
+                            partialTree[0].push({ type: "HASH", data: left_1 });
+                        }
+                        partialTree[0][i_1 + 1] = ({ type: "TARGET", data: targetNodeIndex });
+                        targetNodeIndex++;
+                        rightTargetNodeFound = true;
+                    }
+                }
+                if (!leftTargetNodeFound && !rightTargetNodeFound) {
+                    partialTree[0].push({ type: "CHILD", data: null });
+                    partialTree[0].push({ type: "CHILD", data: null });
+                }
+                if (leftTargetNodeFound && !rightTargetNodeFound) {
+                    partialTree[0].push({ type: "HASH", data: right_1 });
+                }
+            }
+        }
+        // add additional layers on top
+        var nodes = partialTree[0];
+        while (nodes.length > 1) {
+            var partialTreeIndex = partialTree.length;
+            partialTree.push([]);
+            for (var i = 0; i < nodes.length; i += 2) {
+                if (i + 1 === nodes.length) {
+                    // push an empty buffer, knock this up further the stack
+                    partialTree[partialTreeIndex].push({ type: "CHILD", data: null });
+                }
+                else {
+                    var index = i / 2 | 0;
+                    var left = nodes[i];
+                    var right = i + 1 == nodes.length ? left : nodes[i + 1];
+                    if (left.type == "CHILD" && right.type == "CHILD") {
+                        partialTree[partialTreeIndex].push({
+                            type: "CHILD",
+                            data: null
+                        });
+                    }
+                    if (left.type == "EMPTY" && right.type == "EMPTY") {
+                        partialTree[partialTreeIndex].push({
+                            type: "EMPTY",
+                            data: null
+                        });
+                    }
+                    if ((left.type == "HASH" || left.type == "TARGET") &&
+                        (right.type == "HASH" || right.type == "TARGET")) {
+                        partialTree[partialTreeIndex].push({
+                            type: "EMPTY",
+                            data: null
+                        });
+                    }
+                    if ((left.type == "HASH" && right.type == "EMPTY") ||
+                        (right.type == "HASH" && right.type == "EMPTY")) {
+                        partialTree[partialTreeIndex].push({
+                            type: "EMPTY",
+                            data: null
+                        });
+                    }
+                    if ((left.type == "CHILD" && right.type == "EMPTY")) {
+                        partialTree[partialTreeIndex - 1][i] = {
+                            type: "HASH",
+                            data: this.layers[partialTreeIndex - 1][i]
+                        };
+                        partialTree[partialTreeIndex].push({
+                            type: "EMPTY",
+                            data: null
+                        });
+                    }
+                    if ((left.type == "EMPTY" && right.type == "CHILD")) {
+                        partialTree[partialTreeIndex - 1][i + 1] = {
+                            type: "HASH",
+                            data: this.layers[partialTreeIndex - 1][i + 1]
+                        };
+                        partialTree[partialTreeIndex].push({
+                            type: "EMPTY",
+                            data: null
+                        });
+                    }
+                }
+            }
+            nodes = partialTree[partialTreeIndex];
+        }
+        return partialTree;
+    };
+    /**
+     * verifyPartialTree
+     * @desc Returns true if the partialTree (multiple array of hashes) can hash the
+     * tree to the merkle root.
+     * @param {Object[]}
+     * @param {Buffer[]}
+     * @param {Buffer}
+     * @return {booean}
+     * @example
+     *```js
+     *const partialTree = tree.createPartialTree(leaves)
+     const areLeavesValid = tree.verifyPartialTree(partialTree, leaves, tree.getRoot())
+     *```
+     */
+    MerkleTree.prototype.verifyPartialTree = function (partialTree, leaves, root) {
+        for (var j = 0; j < partialTree.length; j++) {
+            var nodes = partialTree[j];
+            if (nodes.length == 1) {
+                return Buffer.compare(nodes[0].data, root) == 0;
+            }
+            for (var i = 0; i < nodes.length; i += 2) {
+                if (i + 1 !== nodes.length) {
+                    var index = i / 2 | 0;
+                    var left = nodes[i];
+                    var right = i + 1 == nodes.length ? left : nodes[i + 1];
+                    if (left.type == "CHILD" && right.type == "CHILD") { }
+                    else {
+                        var left_data = left.type == "HASH" ? left.data : leaves[left.data];
+                        var right_data = right.type == "HASH" ? right.data : leaves[right.data];
+                        // if ((left.type == "HASH" && right.type == "TARGET")) {
+                        //   var combined = [left.data, leaves[right.data]];
+                        // }
+                        // if ((left.type == "TARGET" && right.type == "HASH")) {
+                        //   var combined = [leaves[left.data], right.data];
+                        // }
+                        // if ((left.type == "HASH" && right.type == "HASH")) {
+                        //   var combined = [left.data, right.data];
+                        // }
+                        // if ((left.type == "HASH" && right.type == "HASH")) {
+                        //   var combined = [left.data, right.data];
+                        // }
+                        var combined = [left_data, right_data];
+                        var buffered = Buffer.concat(combined);
+                        var data = this.hashAlgo(buffered);
+                        partialTree[j + 1][index] = {
+                            type: "HASH",
+                            data: data
+                        };
+                    }
+                }
+            }
+        }
+    };
+    /**
      * getLeaves
      * @desc Returns array of leaves of Merkle Tree.
      * @return {Buffer[]}
@@ -184,7 +351,6 @@ var MerkleTree = /** @class */ (function () {
                 var layer = this.layers[i];
                 var isRightNode = index % 2;
                 var pairIndex = (isRightNode ? index - 1 : index);
-                var position = isRightNode ? 'left' : 'right';
                 if (pairIndex < layer.length) {
                     proof.push({
                         data: layer[pairIndex]

@@ -51,6 +51,32 @@ export declare class MerkleTree {
     constructor(leaves: any, hashAlgorithm: any, options?: Options);
     createHashes(nodes: any): void;
     /**
+     * verifyPartialTree
+     * @desc Constructs Partial Merkle Tree
+     * @param {Buffer[]} targetNodes - leaves that are to be provided to the partial merkle tree
+     * @return {Buffer[][]}
+     * @example
+     *```js
+     *const partialTree = tree.createPartialTree(leaves)
+     *```
+     */
+    createPartialTree(targetNodes: any): any[];
+    /**
+     * verifyPartialTree
+     * @desc Returns true if the partialTree (multiple array of hashes) can hash the
+     * tree to the merkle root.
+     * @param {Object[]}
+     * @param {Buffer[]}
+     * @param {Buffer}
+     * @return {booean}
+     * @example
+     *```js
+     *const partialTree = tree.createPartialTree(leaves)
+     const areLeavesValid = tree.verifyPartialTree(partialTree, leaves, tree.getRoot())
+     *```
+     */
+    verifyPartialTree(partialTree: any, leaves: any, root: any): boolean;
+    /**
      * getLeaves
      * @desc Returns array of leaves of Merkle Tree.
      * @return {Buffer[]}
